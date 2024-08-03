@@ -2,6 +2,7 @@ import discord
 import os
 import asyncio
 import yt_dlp
+from musicQueue import MusicQueue
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
 
@@ -10,9 +11,12 @@ commandMessages = {
     "play"  : commandDictator + "play",
     "pause" : commandDictator + "pause",
     "resume": commandDictator + "resume",
+    "skip"  : commandDictator + "skip",
     "stop"  : commandDictator + "stop",
     "fart"  : commandDictator + "fart"
 }
+
+musicQueue = MusicQueue()
 
 ytdlOptions = {"format": "bestaudio/best"}
 ffmpegOptions = {"options": "-vn"}
@@ -57,6 +61,9 @@ def run():
 
         elif message.content.startswith(commandMessages["fart"]):
             await handle_fart(message)
+            
+        elif message.content.startswith(commandMessages["skip"]):
+            await handle_skip(message)
 
     """
         Handles the play command.
@@ -87,7 +94,7 @@ def run():
         try:
             voiceClients[message.guild.id].pause()
         except Exception as e:
-            await message.channel.send("no")
+            await message.channel.send("no: " + str(e))
     
     """
         Handles the resume command.
@@ -99,7 +106,7 @@ def run():
         try:
             voiceClients[message.guild.id].resume()
         except Exception as e:
-            await message.channel.send("no")
+            await message.channel.send("no: " + str(e))
 
     """
         Handles the stop command.
@@ -111,7 +118,23 @@ def run():
         try:
             await voiceClients[message.guild.id].disconnect()
         except Exception as e:
-            await message.channel.send("erm what the deuce")
+            await message.channel.send("erm what the deuce" + str(e))
+            
+    """
+        Handles the skip command.
+
+        Args:
+            message (discord.Message): The message containing the stop command.
+    """
+    async def handle_skip(message):
+        try:
+            await voiceClients[message.guild.id].stop()
+            if musicQueue.next():
+                await play_song(message, musicQueue.peek())
+            else:
+                await message.channel.send("No song bruh")
+        except Exception as e:
+            await message.channel.send("erm what the deuce" + str(e))
 
     """
         Handles the fart command.
@@ -122,11 +145,12 @@ def run():
     async def handle_fart(message):
         try:
             await join_voice_channel(message)
-            song_info = await get_song_info("https://www.youtube.com/watch?v=9FLRHejWAo8")
+            song_info = await get_song_info(os.getenv('FART_URL'))
             await play_song(message, song_info)
             await message.channel.send("farding")
         except Exception as e:
             await message.channel.send("no fard")
+            await message.channel.send("Actual Error: " + str(e))
 
     """
         Joins the voice channel of the message author.
@@ -135,6 +159,9 @@ def run():
             message (discord.Message): The message from the user requesting the bot to join a voice channel.
     """
     async def join_voice_channel(message):
+        if message.guild.id in voiceClients and voiceClients[message.guild.id].is_connected():
+            return #Already in voice
+        
         voice_client = await message.author.voice.channel.connect()
         voiceClients[voice_client.guild.id] = voice_client
 
@@ -190,17 +217,25 @@ def run():
             song_info (dictionary): Map of song attributes (url, title, duration, thumbnail)
     """
     async def play_song(message, song_info):
+        if voiceClients[message.guild.id].is_playing():
+            musicQueue.enqueue(song_info)
+            await message.channel.send(f"{song_info['title']} has been added to the queue")
+            return
+            
         player = discord.FFmpegPCMAudio(song_info['url'], **ffmpegOptions)
         voiceClients[message.guild.id].play(player)
-        if song_info['title']:
+        musicQueue.enqueue(song_info)
+        if song_info['url'] != os.getenv('FART_URL'):
             embed = discord.Embed(title="Now Playing", description=f"[{song_info['title']}]({song_info['url']})", color=0x00ff00)
-            embed.add_field(name="Duration", value=f"{song_info['duration'] // 60}:{song_info['duration'] % 60:02d}")
+            embed.add_field(name="Duration", value=f"{song_info['duration'] // 60}:{song_info['duration'] % 60}")
             embed.set_thumbnail(url=song_info['thumbnail'])
             embed.set_footer(text="Playing in the voice channel")
             
             progress_message = await message.channel.send(embed=embed)
             await update_song_progress(progress_message, song_info)
-            
+            if not musicQueue.is_empty():
+                await handle_skip(message)
+          
     """
         Updates the progress of the song in the embed message.
 
@@ -211,19 +246,20 @@ def run():
     async def update_song_progress(message, song_info):
         duration = song_info['duration']
         start_time = datetime.now()
+        elapsed = 1
         while True:
-            elapsed = (datetime.now() - start_time).total_seconds()
             if elapsed > duration:
                 break
 
             progress = int((elapsed / duration) * 20)
             progress_bar = "█" * progress + "░" * (20 - progress)
             embed = discord.Embed(title="Now Playing", description=f"[{song_info['title']}]({song_info['url']})", color=0x00ff00)
-            embed.add_field(name="Duration", value=f"{duration // 60}:{duration % 60:02d}")
-            embed.add_field(name="Progress", value=f"{progress_bar} {elapsed // 60}:{elapsed % 60:02d}")
+            embed.add_field(name="Duration", value=f"{duration // 60}:{duration % 60}")
+            embed.add_field(name="Progress", value=f"{progress_bar} {int(elapsed // 60)}:{int(elapsed% 60):02d}/{duration // 60}:{duration % 60}")
             embed.set_thumbnail(url=song_info['thumbnail'])
             embed.set_footer(text="Playing in the voice channel")
             await message.edit(embed=embed)
-            await asyncio.sleep(5)
+            await asyncio.sleep(1)
+            elapsed if (voiceClients[message.guild.id].is_paused()) else (datetime.now() - start_time).total_seconds()
 
     client.run(TOKEN)
