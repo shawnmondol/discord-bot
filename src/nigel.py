@@ -6,7 +6,7 @@ from musicQueue import MusicQueue
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
 
-commandDictator = (os.getenv('TESTING') == 'true') and "?" or "$"
+commandDictator = "$" if (os.getenv('TESTING') == 'true') else "?"
 commandMessages = {
     "play"  : commandDictator + "play",
     "pause" : commandDictator + "pause",
