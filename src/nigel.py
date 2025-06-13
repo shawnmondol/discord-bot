@@ -2,19 +2,13 @@ import discord
 import os
 import asyncio
 import yt_dlp
+import logger
 from musicQueue import MusicQueue
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
 
-commandDictator = "$" if (os.getenv('TESTING') == 'true') else "?"
-commandMessages = {
-    "play"  : commandDictator + "play",
-    "pause" : commandDictator + "pause",
-    "resume": commandDictator + "resume",
-    "skip"  : commandDictator + "skip",
-    "stop"  : commandDictator + "stop",
-    "fart"  : commandDictator + "fart"
-}
+commandDictator =""
+commandMessages = {}
 
 musicQueue = MusicQueue()
 
@@ -26,9 +20,19 @@ voiceClients = {}
 
 def run():
     load_dotenv()
+    commandDictator = "$" if os.getenv('TESTING') else "?"
+    commandMessages = {
+        "play"   : f"{commandDictator}play",
+        "pause"  : f"{commandDictator}pause",
+        "resume" : f"{commandDictator}resume",
+        "stop"   : f"{commandDictator}stop",
+        "fart"   : f"{commandDictator}fart",
+        "skip"   : f"{commandDictator}skip"
+    }
     TOKEN = os.getenv('TOKEN')
     intents = discord.Intents.default()
     intents.message_content = True
+    intents.voice_states    = True
     client = discord.Client(intents=intents)
 
     """Handles the event when the bot is ready."""
@@ -131,7 +135,7 @@ def run():
     """
     async def handle_skip(message):
         try:
-            await voiceClients[message.guild.id].stop()
+            voiceClients[message.guild.id].stop()
             if musicQueue.next():
                 await play_song(message, musicQueue.peek())
             else:
