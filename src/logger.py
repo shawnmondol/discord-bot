@@ -3,7 +3,7 @@ from logging.handlers import RotatingFileHandler
 
 # 1) Basic console logging
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format="%(asctime)s %(levelname)-8s %(name)s: %(message)s",
 )
 

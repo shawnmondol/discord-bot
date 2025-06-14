@@ -1,4 +1,9 @@
 import discord
+
+
+print("discord.py version:", discord.__version__)
+print("Opus loaded?:", discord.opus.is_loaded())
+
 import os
 import asyncio
 import yt_dlp
@@ -19,6 +24,7 @@ ytdl = yt_dlp.YoutubeDL(ytdlOptions)
 voiceClients = {}
 
 def run():
+    global commandDictator, commandMessages
     load_dotenv()
     commandDictator = "$" if os.getenv('TESTING') else "?"
     commandMessages = {
@@ -166,12 +172,22 @@ def run():
             message (discord.Message): The message from the user requesting the bot to join a voice channel.
     """
     async def join_voice_channel(message):
-        if message.guild.id in voiceClients and voiceClients[message.guild.id].is_connected():
-            return #Already in voice
-        
-        voice_client = await message.author.voice.channel.connect()
-        voiceClients[voice_client.guild.id] = voice_client
+        channel = message.author.voice.channel
+        guild_id = message.guild.id
 
+        # If we have a cached client, try to clean it up
+        old_vc = voiceClients.get(guild_id)
+        if old_vc:
+            # force-disconnect if still connected (this also calls cleanup())
+            if old_vc.is_connected():
+                await old_vc.disconnect()
+            voiceClients.pop(guild_id, None)
+
+        # Now make a fresh connection
+        voice_client = await channel.connect()
+        voiceClients[guild_id] = voice_client
+        
+        return voice_client
 
     """
         Fetches the song URL from YouTube using yt-dlp.
