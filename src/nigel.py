@@ -2,19 +2,13 @@ import discord
 import os
 import asyncio
 import yt_dlp
+import logger
 from musicQueue import MusicQueue
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
 
-commandDictator = "$" if (os.getenv('TESTING') == 'true') else "?"
-commandMessages = {
-    "play"  : commandDictator + "play",
-    "pause" : commandDictator + "pause",
-    "resume": commandDictator + "resume",
-    "skip"  : commandDictator + "skip",
-    "stop"  : commandDictator + "stop",
-    "fart"  : commandDictator + "fart"
-}
+commandDictator =""
+commandMessages = {}
 
 musicQueue = MusicQueue()
 
@@ -25,10 +19,21 @@ ytdl = yt_dlp.YoutubeDL(ytdlOptions)
 voiceClients = {}
 
 def run():
+    global commandDictator, commandMessages
     load_dotenv()
+    commandDictator = "$" if os.getenv('TESTING') else "?"
+    commandMessages = {
+        "play"   : f"{commandDictator}play",
+        "pause"  : f"{commandDictator}pause",
+        "resume" : f"{commandDictator}resume",
+        "stop"   : f"{commandDictator}stop",
+        "fart"   : f"{commandDictator}fart",
+        "skip"   : f"{commandDictator}skip"
+    }
     TOKEN = os.getenv('TOKEN')
     intents = discord.Intents.default()
     intents.message_content = True
+    intents.voice_states    = True
     client = discord.Client(intents=intents)
 
     """Handles the event when the bot is ready."""
@@ -131,7 +136,7 @@ def run():
     """
     async def handle_skip(message):
         try:
-            await voiceClients[message.guild.id].stop()
+            voiceClients[message.guild.id].stop()
             if musicQueue.next():
                 await play_song(message, musicQueue.peek())
             else:
@@ -162,12 +167,22 @@ def run():
             message (discord.Message): The message from the user requesting the bot to join a voice channel.
     """
     async def join_voice_channel(message):
-        if message.guild.id in voiceClients and voiceClients[message.guild.id].is_connected():
-            return #Already in voice
-        
-        voice_client = await message.author.voice.channel.connect()
-        voiceClients[voice_client.guild.id] = voice_client
+        channel = message.author.voice.channel
+        guild_id = message.guild.id
 
+        # If we have a cached client, try to clean it up
+        old_vc = voiceClients.get(guild_id)
+        if old_vc:
+            # force-disconnect if still connected (this also calls cleanup())
+            if old_vc.is_connected():
+                await old_vc.disconnect()
+            voiceClients.pop(guild_id, None)
+
+        # Now make a fresh connection
+        voice_client = await channel.connect()
+        voiceClients[guild_id] = voice_client
+        
+        return voice_client
 
     """
         Fetches the song URL from YouTube using yt-dlp.
