@@ -1,9 +1,4 @@
 import discord
-
-
-print("discord.py version:", discord.__version__)
-print("Opus loaded?:", discord.opus.is_loaded())
-
 import os
 import asyncio
 import yt_dlp
